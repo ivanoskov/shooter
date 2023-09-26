@@ -5,12 +5,7 @@ const path = require('path');
 
 module.exports = {
 
-    resolve: {
-        fallback: {
-            util: require.resolve("util/")
-        }
-    },
-    entry: path.resolve(__dirname, '../src/script.js'),
+    entry: path.resolve(__dirname, '../src/js/main.js'),
     output:
     {
         hashFunction: 'xxhash64',
