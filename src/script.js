@@ -228,13 +228,13 @@ loader.load("collision-world.glb", (gltf) => {
   helper.visible = false;
   scene.add(helper);
 
-  // const gui = new GUI({ width: 200 });
-  // gui.add({ debug: false }, 'debug')
-  //   .onChange(function (value) {
+  const gui = new GUI({ width: 200 });
+  gui.add({ OctreeDebug: false }, 'OctreeDebug')
+    .onChange(function (value) {
 
-  //     helper.visible = value;
+      helper.visible = value;
 
-  //   });
+    });
 });
 
 const renderer = new THREE.WebGLRenderer({ canvas });
