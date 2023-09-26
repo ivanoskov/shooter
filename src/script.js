@@ -5,6 +5,7 @@ import { Octree } from "three/addons/math/Octree.js";
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Capsule } from "three/addons/math/Capsule.js";
 import { OctreeHelper } from "three/addons/helpers/OctreeHelper.js";
+import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 // import { FirstPersonControls } from "three/examples/jsm/controls/FirstPersonControls.js";
 // import CannonDebugger from "cannon-es-debugger";
 // import GameObject from "./gameObject.js";
@@ -22,34 +23,39 @@ const sizes = {
   height: window.innerHeight,
 };
 
+const STEPS_PER_FRAME = 5;
+
 const camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height);
 // camera.position.z = 2;
 camera.position.y = 1;
 camera.rotation.order = "YXZ";
 scene.add(camera);
 
+const worldOctree = new Octree();
 
 
-const directionalLight = new THREE.DirectionalLight( 0xffffff, 2.5 );
-directionalLight.position.set( - 5, 25, - 1 );
+
+
+const directionalLight = new THREE.DirectionalLight(0xffffff, 2.5);
+directionalLight.position.set(- 5, 25, - 1);
 directionalLight.castShadow = true;
 directionalLight.shadow.camera.near = 0.01;
 directionalLight.shadow.camera.far = 500;
 directionalLight.shadow.camera.right = 30;
 directionalLight.shadow.camera.left = - 30;
-directionalLight.shadow.camera.top	= 30;
+directionalLight.shadow.camera.top = 30;
 directionalLight.shadow.camera.bottom = - 30;
 directionalLight.shadow.mapSize.width = 1024;
 directionalLight.shadow.mapSize.height = 1024;
 directionalLight.shadow.radius = 4;
 directionalLight.shadow.bias = - 0.00006;
-scene.add( directionalLight );
+scene.add(directionalLight);
 
 
 const stats = new Stats();
 document.body.appendChild(stats.dom);
 
-document.body.addEventListener("mousedown", () => {
+canvas.addEventListener("mousedown", () => {
   document.body.requestPointerLock();
 });
 
@@ -70,12 +76,11 @@ document.addEventListener("keyup", (event) => {
 
 const GRAVITY = 30;
 
-const worldOctree = new Octree();
 
 const playerCollider = new Capsule(
   new THREE.Vector3(0, 0.35, 0),
   new THREE.Vector3(0, 1, 0),
-  0.35
+  3
 );
 
 const playerVelocity = new THREE.Vector3();
@@ -151,21 +156,21 @@ function updatePlayer(deltaTime) {
 
 function playerCollisions() {
 
-  const result = worldOctree.capsuleIntersect( playerCollider );
+  const result = worldOctree.capsuleIntersect(playerCollider);
 
   playerOnFloor = false;
 
-  if ( result ) {
+  if (result) {
 
     playerOnFloor = result.normal.y > 0;
 
-    if ( ! playerOnFloor ) {
+    if (!playerOnFloor) {
 
-      playerVelocity.addScaledVector( result.normal, - result.normal.dot( playerVelocity ) );
+      playerVelocity.addScaledVector(result.normal, - result.normal.dot(playerVelocity));
 
     }
 
-    playerCollider.translate( result.normal.multiplyScalar( result.depth ) );
+    playerCollider.translate(result.normal.multiplyScalar(result.depth));
 
   }
 
@@ -218,6 +223,18 @@ loader.load("collision-world.glb", (gltf) => {
       }
     }
   });
+
+  const helper = new OctreeHelper(worldOctree);
+  helper.visible = false;
+  scene.add(helper);
+
+  // const gui = new GUI({ width: 200 });
+  // gui.add({ debug: false }, 'debug')
+  //   .onChange(function (value) {
+
+  //     helper.visible = value;
+
+  //   });
 });
 
 const renderer = new THREE.WebGLRenderer({ canvas });
@@ -228,14 +245,20 @@ const clock = new THREE.Clock();
 let delta;
 
 const tick = () => {
-  requestAnimationFrame(tick);
 
-  delta = Math.min(clock.getDelta(), 0.1);
+  delta = Math.min(clock.getDelta(), 0.1) / STEPS_PER_FRAME;
 
-  controls(delta);
-  updatePlayer(delta);
+  for (let i = 0; i < STEPS_PER_FRAME; i++) {
+
+    controls(delta);
+    updatePlayer(delta);
+
+  }
+
+
   renderer.render(scene, camera);
   stats.update();
+  requestAnimationFrame(tick);
 };
 
 tick();
