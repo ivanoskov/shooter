@@ -12,6 +12,7 @@ import {
   playerColliderRadius,
   playerPos,
 } from "./settings";
+import { map } from "./map";
 import { Player } from "./player";
 
 // создание базовых классов и настроек игры
@@ -107,34 +108,82 @@ const meshFloor = new THREE.Mesh(geometryFloor, materialFloor);
 worldGroup.add(meshFloor);
 scene.add(worldGroup);
 
-// box
+for (
+  let objectIndex = 0;
+  objectIndex < map.STATIC_OBJECTS.LOAD_OBJECTS.length;
+  objectIndex++
+) {
+  const staticObject = map.STATIC_OBJECTS.LOAD_OBJECTS[objectIndex];
 
-const geometryBox = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-const materialBox = new THREE.MeshBasicMaterial({
-  color: "red",
-  wireframe: true,
-});
+  const loader = new GLTFLoader().setPath("./models/");
 
-const meshBox = new THREE.Mesh(geometryBox, materialBox);
-scene.add(meshBox);
+  loader.load(staticObject.file, (gltf) => {
+    scene.add(gltf.scene);
 
-//wall
+    gltf.scene.position.copy(staticObject.position);
 
-const geometryWall = new THREE.BoxGeometry(1, 0.2, 0.05);
-const materialWall = new THREE.MeshBasicMaterial({
-  color: "red",
-  wireframe: true,
-});
+    worldGroup.add(gltf.scene);
+    worldOctree.fromGraphNode(worldGroup);
 
-const loader = new GLTFLoader().setPath("./models/");
+    gltf.scene.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
 
-loader.load("collision-world.glb", (gltf) => {
-  scene.add(gltf.scene);
+        if (child.material.map) {
+          child.material.map.anisotropy = 4;
+        }
+      }
+    });
 
-  worldOctree.fromGraphNode(gltf.scene);
+    // переделать!!
+    const helper = new OctreeHelper(worldOctree);
+    helper.visible = false;
+    scene.add(helper);
+
+    const gui = new GUI({ width: 200 });
+    gui.add({ OctreeDebug: false }, "OctreeDebug").onChange(function (value) {
+      helper.visible = value;
+    });
+    //
+  });
+}
+
+for (
+  let objectIndex = 0;
+  objectIndex < map.STATIC_OBJECTS.THREE_OBJESCTS.length;
+  objectIndex++
+) {
+  const threeObject = map.STATIC_OBJECTS.THREE_OBJESCTS[objectIndex];
+
+  const group = new THREE.Group();
+  switch (threeObject.type) {
+    case "box":
+      const geometryBox = new THREE.BoxGeometry(
+        threeObject.geometry.x,
+        threeObject.geometry.y,
+        threeObject.geometry.z
+      );
+      const materialBox = new THREE.MeshPhongMaterial({
+        color: threeObject.color,
+      });
+
+      const meshBox = new THREE.Mesh(geometryBox, materialBox);
+      group.add(meshBox);
+
+      break;
+
+    default:
+      break;
+  }
+
+  group.position.copy(threeObject.position);
+  scene.add(group);
+
+  worldGroup.add(group);
   worldOctree.fromGraphNode(worldGroup);
 
-  gltf.scene.traverse((child) => {
+  group.traverse((child) => {
     if (child.isMesh) {
       child.castShadow = true;
       child.receiveShadow = true;
@@ -144,16 +193,7 @@ loader.load("collision-world.glb", (gltf) => {
       }
     }
   });
-
-  const helper = new OctreeHelper(worldOctree);
-  helper.visible = false;
-  scene.add(helper);
-
-  const gui = new GUI({ width: 200 });
-  gui.add({ OctreeDebug: false }, "OctreeDebug").onChange(function (value) {
-    helper.visible = value;
-  });
-});
+}
 
 const tick = () => {
   delta = Math.min(clock.getDelta(), 0.1) / STEPS_PER_FRAME;

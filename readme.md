@@ -10,6 +10,7 @@
 
   ```js
   export class Player {
+
   constructor(position, colliderHeight, colliderRadius, scene, camera) {
     this.position = position;
     this.velocity = new THREE.Vector3();
@@ -44,7 +45,7 @@
   }
 
   controls(deltaTime, keyStates) {
-  // gives a bit of air control
+    // gives a bit of air control
     const speedDelta = deltaTime \* (this.onFloor ? 25 : 8);
 
     if (keyStates["KeyW"]) {
@@ -85,7 +86,7 @@
   }
 
   update(deltaTime, worldOctree) {
-  let damping = Math.exp(-4 \* deltaTime) - 1;
+    let damping = Math.exp(-4 \* deltaTime) - 1;
 
     if (!this.onFloor) {
       this.velocity.y -= GRAVITY * deltaTime;
@@ -101,3 +102,18 @@
   }
   }
   ```
+
+- [x] Разработана система редактирования карты через json-список в файле map.js. Начальное API: <br> ```js
+  (property) STATIC_OBJECTS: {
+      LOAD_OBJECTS: {
+          position: Vector3;
+          file: string;
+      }[];
+      THREE_OBJESCTS: {
+          type: string;
+          position: Vector3;
+          geometry: Vector3;
+          color: string;
+      }[];
+  }
+  ``` <br> Таким образом можно добавлять объекты, как с помощью моделей, так и стандартных элементарных объектв, таких как box: ![Sample Screenshot](docs/img/screenshot_5.png)
