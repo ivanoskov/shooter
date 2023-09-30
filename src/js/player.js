@@ -8,14 +8,26 @@ export class Player {
     this.velocity = new THREE.Vector3();
     this.direction = new THREE.Vector3();
     this.onFloor = false;
+    this.speed = 25;
+    this.jumpPower = 15
     this.collider = new Capsule(
       this.position,
-      new THREE.Vector3().copy(this.position).add(new THREE.Vector3(0, colliderHeight, 0)),
+      new THREE.Vector3()
+        .copy(this.position)
+        .add(new THREE.Vector3(0, colliderHeight, 0)),
       colliderRadius
     );
     this.camera = camera;
     camera.rotation.order = "YXZ";
     scene.add(camera);
+  }
+
+  setSpeed(speed) {
+    this.speed = speed;
+  }
+
+  setJumpPower(jumpPower) {
+    this.jumpPower = jumpPower;
   }
 
   getForwardVector() {
@@ -37,7 +49,8 @@ export class Player {
 
   controls(deltaTime, keyStates) {
     // gives a bit of air control
-    const speedDelta = deltaTime * (this.onFloor ? 25 : 8);
+    const speedDelta =
+      deltaTime * (this.onFloor ? this.speed : this.speed * 0.32);
 
     if (keyStates["KeyW"]) {
       this.velocity.add(this.getForwardVector().multiplyScalar(speedDelta));
@@ -57,7 +70,7 @@ export class Player {
 
     if (this.onFloor) {
       if (keyStates["Space"]) {
-        this.velocity.y = 15;
+        this.velocity.y = this.jumpPower;
       }
     }
   }

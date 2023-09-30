@@ -27,6 +27,8 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x88ccee);
 const worldGroup = new THREE.Group();
 
+let mouse_sensitivity = 0.5;
+
 // инициализация сцены
 
 const worldOctree = new Octree();
@@ -71,8 +73,10 @@ canvas.addEventListener("mousedown", () => {
 
 document.body.addEventListener("mousemove", (event) => {
   if (document.pointerLockElement === document.body) {
-    player.camera.rotation.y -= event.movementX / 500;
-    player.camera.rotation.x -= event.movementY / 500;
+    player.camera.rotation.y -=
+      event.movementX / (1000 * (1 - mouse_sensitivity));
+    player.camera.rotation.x -=
+      event.movementY / (1000 * (1 - mouse_sensitivity));
   }
 });
 
@@ -94,8 +98,54 @@ const player = new Player(
 );
 const keyStates = {};
 
-// получение глобального вектора направления взгляда игрока
+const panel = new GUI({ width: 310 });
 
+const folder1 = panel.addFolder("Physics");
+const folder2 = panel.addFolder("Player");
+const folder3 = panel.addFolder("Input");
+
+let settings = {
+  "show Octree sheet": false,
+  "player speed": player.speed,
+  "player jump power": player.jumpPower,
+  "mouse sensitivity": mouse_sensitivity,
+};
+
+folder1.add(settings, "show Octree sheet");
+folder2
+  .add(settings, "player speed", 0, player.speed * 2, 0.01)
+  .listen()
+  .onChange(function (speed) {
+    player.setSpeed(speed);
+  });
+folder2
+  .add(settings, "player jump power", 0, player.jumpPower * 2, 0.01)
+  .listen()
+  .onChange(function (jumpPower) {
+    player.setJumpPower(jumpPower);
+  });
+folder3
+  .add(settings, "mouse sensitivity", 0, mouse_sensitivity * 2, 0.01)
+  .listen()
+  .onChange(function (sensitivity) {
+    mouse_sensitivity =  sensitivity;
+  });
+
+folder1.close();
+folder2.open();
+folder3.close();
+
+// const gui = new GUI();
+// const physicFolder = gui.addFolder("physic");
+// physicFolder
+//   .add({ OctreeDebug: false }, "OctreeDebug")
+//   .onChange(function (value) {
+//     helper.visible = value;
+//   });
+// physicFolder.open();
+// const playerFolder = gui.addFolder("player");
+// playerFolder.add(player.speed, "z", 0, 50);
+// playerFolder.open();
 // floor
 
 const geometryFloor = new THREE.BoxGeometry(1, 0.1, 1);
@@ -141,10 +191,7 @@ for (
     helper.visible = false;
     scene.add(helper);
 
-    const gui = new GUI({ width: 200 });
-    gui.add({ OctreeDebug: false }, "OctreeDebug").onChange(function (value) {
-      helper.visible = value;
-    });
+    // const gui_1 = new GUI({ width: 200 });
     //
   });
 }
@@ -207,6 +254,5 @@ const tick = () => {
   stats.update();
   requestAnimationFrame(tick);
 };
-
 
 tick();
