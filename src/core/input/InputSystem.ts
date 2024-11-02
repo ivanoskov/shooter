@@ -18,13 +18,13 @@ export interface InputEvent {
 export class InputSystem extends EventEmitter {
   private keyStates: Map<string, boolean>;
   private mouseSensitivity: number;
-  private isPointerLocked: boolean;
+  private isLocked: boolean;
 
   constructor() {
     super();
     this.keyStates = new Map();
     this.mouseSensitivity = 0.5;
-    this.isPointerLocked = false;
+    this.isLocked = false;
     this.init();
   }
 
@@ -56,7 +56,7 @@ export class InputSystem extends EventEmitter {
 
   private setupMouseEvents(): void {
     document.addEventListener('mousemove', (event) => {
-      if (this.isPointerLocked) {
+      if (this.isLocked) {
         this.emit(InputEventType.MOUSE, {
           type: InputEventType.MOUSE,
           movementX: event.movementX * this.mouseSensitivity,
@@ -65,8 +65,13 @@ export class InputSystem extends EventEmitter {
       }
     });
 
-    document.addEventListener('click', () => {
-      if (!this.isPointerLocked) {
+    document.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement;
+      if (target.closest('.lil-gui')) {
+        return;
+      }
+
+      if (!this.isLocked) {
         document.body.requestPointerLock();
       }
     });
@@ -74,11 +79,8 @@ export class InputSystem extends EventEmitter {
 
   private setupPointerLockEvents(): void {
     document.addEventListener('pointerlockchange', () => {
-      this.isPointerLocked = document.pointerLockElement === document.body;
-      this.emit(InputEventType.POINTER_LOCK, {
-        type: InputEventType.POINTER_LOCK,
-        locked: this.isPointerLocked
-      });
+      this.isLocked = document.pointerLockElement !== null;
+      this.emit(InputEventType.POINTER_LOCK, { locked: this.isLocked });
     });
   }
 

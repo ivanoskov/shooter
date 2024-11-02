@@ -7,8 +7,10 @@ import { GUI } from "three/addons/libs/lil-gui.module.min.js";
 import { Player } from "./Player";
 import { GameSettings } from "../config/settings";
 import { MapConfig } from "../config/map";
-import { IPlayerControls } from "../types";
+import { IPlayerControls, IThreeObject } from "../types";
 import { InputSystem, InputEventType, InputEvent } from "./input/InputSystem";
+import { BrowserController } from './browser/BrowserController';
+import { ILoadObject, QualityPresets } from "../types/graphics";
 
 interface StatsWithDOM extends Stats {
   domElement: HTMLDivElement;
@@ -66,6 +68,9 @@ export class Game {
     
     THREE.Cache.enabled = true;
 
+    // Инициализируем контроллер браузера
+    BrowserController.init();
+
     this.initRenderer(canvas);
     this.initStats();
     this.initLights();
@@ -80,9 +85,22 @@ export class Game {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    
+    this.renderer.useLegacyLights = false;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = GameSettings.GRAPHICS.TONE_MAPPING;
+    this.renderer.toneMappingExposure = GameSettings.GRAPHICS.EXPOSURE;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.VSMShadowMap;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.autoUpdate = false;
+    this.renderer.shadowMap.needsUpdate = true;
+    
+    this.renderer.info.autoReset = false;
+    this.renderer.capabilities.maxTextures = Math.min(this.renderer.capabilities.maxTextures, 16);
+
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    
+    THREE.Cache.enabled = true;
   }
 
   private initStats(): void {
@@ -146,6 +164,13 @@ export class Game {
         this.player.getCamera().setMouseSensitivity(value);
       });
 
+    const graphicsFolder = gui.addFolder("Graphics");
+    
+    const qualityControl = graphicsFolder.add({ quality: 'high' }, 'quality', ['low', 'medium', 'high'])
+      .onChange((value: string) => {
+        this.applyQualityPreset(value);
+      });
+
     folder1.close();
     folder2.open();
     folder3.close();
@@ -181,7 +206,7 @@ export class Game {
   private loadMap(): void {
     const loader = new GLTFLoader().setPath('./models/');
     
-    const loadPromises = MapConfig.STATIC_OBJECTS.LOAD_OBJECTS.map(object => {
+    const loadPromises = MapConfig.STATIC_OBJECTS.LOAD_OBJECTS.map((object: ILoadObject) => {
       return new Promise<void>((resolve, reject) => {
         loader.load(
           object.file,
@@ -199,10 +224,10 @@ export class Game {
                   }
                   
                   if (child.material) {
-                    child.material.precision = 'mediump';
-                    if (child.material.map) {
-                      child.material.map.anisotropy = 4;
-                      child.material.map.generateMipmaps = true;
+                    if (Array.isArray(child.material)) {
+                      child.material.forEach(this.optimizeMaterial);
+                    } else {
+                      this.optimizeMaterial(child.material);
                     }
                   }
                   
@@ -227,7 +252,7 @@ export class Game {
       });
     });
 
-    MapConfig.STATIC_OBJECTS.THREE_OBJESCTS.forEach(object => {
+    MapConfig.STATIC_OBJECTS.THREE_OBJESCTS.forEach((object: IThreeObject) => {
       if (object.type === 'box') {
         try {
           const geometry = new THREE.BoxGeometry(
@@ -252,6 +277,7 @@ export class Game {
 
     Promise.all(loadPromises).then(() => {
       console.log('All models loaded successfully');
+      this.applyQualityPreset('high');
     }).catch((error) => {
       console.error('Error loading models:', error);
     });
@@ -328,6 +354,7 @@ export class Game {
   }
 
   public dispose(): void {
+    BrowserController.dispose();
     cancelAnimationFrame(this.frameId);
     this.renderer.dispose();
     this.scene.traverse((object) => {
@@ -340,5 +367,84 @@ export class Game {
         }
       }
     });
+  }
+
+  private optimizeMaterial(material: THREE.Material): void {
+    if (material instanceof THREE.MeshStandardMaterial) {
+      material.envMapIntensity = 1.0;
+      material.roughness = Math.max(0.4, material.roughness);
+      material.metalness = Math.min(0.9, material.metalness);
+      
+      if (material.map) {
+        material.map.anisotropy = GameSettings.GRAPHICS.ANISOTROPY;
+        material.map.generateMipmaps = true;
+      }
+      
+      if (material.normalMap) {
+        material.normalMap.anisotropy = GameSettings.GRAPHICS.ANISOTROPY;
+      }
+    }
+  }
+
+  private applyQualityPreset(quality: string): void {
+    const preset = QualityPresets[quality];
+    if (!preset) return;
+
+    console.log(`Applying ${quality} quality preset...`);
+
+    // Обновляем настройки теней
+    this.renderer.shadowMap.type = preset.shadowType;
+    this.renderer.shadowMap.enabled = true;
+    
+    // Сначала обновим все источники света
+    this.scene.traverse((object) => {
+      if (object instanceof THREE.Light && object.shadow) {
+        object.shadow.mapSize.width = preset.shadowMapSize;
+        object.shadow.mapSize.height = preset.shadowMapSize;
+        object.shadow.radius = preset.shadowRadius;
+        
+        if (object.shadow.map) {
+          object.shadow.map.dispose();
+          object.shadow.map = null;
+        }
+        
+        if (object instanceof THREE.DirectionalLight) {
+          const resolution = preset.shadowMapSize;
+          const size = 10 * Math.max(1, Math.min(2, resolution / 1024));
+          object.shadow.camera.left = -size;
+          object.shadow.camera.right = size;
+          object.shadow.camera.top = size;
+          object.shadow.camera.bottom = -size;
+          object.shadow.camera.updateProjectionMatrix();
+        }
+      }
+    });
+
+    // Затем обновим все материалы и текстуры
+    this.scene.traverse((object) => {
+      if (object instanceof THREE.Mesh) {
+        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        materials.forEach(material => {
+          if (material instanceof THREE.MeshStandardMaterial) {
+            if (material.map) material.map.anisotropy = preset.anisotropy;
+            if (material.normalMap) material.normalMap.anisotropy = preset.anisotropy;
+            if (material.roughnessMap) material.roughnessMap.anisotropy = preset.anisotropy;
+            if (material.metalnessMap) material.metalnessMap.anisotropy = preset.anisotropy;
+            material.needsUpdate = true;
+          }
+        });
+      }
+    });
+
+    // Принудительно обновляем тени
+    this.renderer.shadowMap.needsUpdate = true;
+    
+    // Обновляем настройки в конфиге
+    GameSettings.GRAPHICS.SHADOW_MAP_SIZE = preset.shadowMapSize;
+    GameSettings.GRAPHICS.SHADOW_RADIUS = preset.shadowRadius;
+    GameSettings.GRAPHICS.ANISOTROPY = preset.anisotropy;
+    GameSettings.GRAPHICS.MAX_LIGHTS = preset.maxLights;
+
+    console.log(`Quality preset ${quality} applied successfully`);
   }
 } 
