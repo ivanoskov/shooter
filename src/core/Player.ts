@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { Capsule } from "three/addons/math/Capsule.js";
 import { Octree } from "three/addons/math/Octree.js";
 import { GameSettings } from "../config/settings";
+import { PlayerCamera } from "./Camera";
 
 export class Player {
   private position: THREE.Vector3;
@@ -11,7 +12,7 @@ export class Player {
   private speed: number;
   private jumpPower: number;
   public collider: Capsule;
-  public camera: THREE.PerspectiveCamera;
+  private playerCamera: PlayerCamera;
 
   constructor(scene: THREE.Scene) {
     this.position = GameSettings.PLAYER.INITIAL_POSITION.clone();
@@ -27,14 +28,7 @@ export class Player {
       GameSettings.PLAYER.COLLIDER_RADIUS
     );
 
-    this.camera = new THREE.PerspectiveCamera(
-      GameSettings.CAMERA.FOV,
-      window.innerWidth / window.innerHeight,
-      GameSettings.CAMERA.NEAR,
-      GameSettings.CAMERA.FAR
-    );
-    this.camera.rotation.order = "YXZ";
-    scene.add(this.camera);
+    this.playerCamera = new PlayerCamera(scene);
   }
 
   public setSpeed(speed: number): void {
@@ -46,17 +40,17 @@ export class Player {
   }
 
   private getForwardVector(): THREE.Vector3 {
-    this.camera.getWorldDirection(this.direction);
+    this.playerCamera.camera.getWorldDirection(this.direction);
     this.direction.y = 0;
     this.direction.normalize();
     return this.direction;
   }
 
   private getSideVector(): THREE.Vector3 {
-    this.camera.getWorldDirection(this.direction);
+    this.playerCamera.camera.getWorldDirection(this.direction);
     this.direction.y = 0;
     this.direction.normalize();
-    this.direction.cross(this.camera.up);
+    this.direction.cross(this.playerCamera.camera.up);
     return this.direction;
   }
 
@@ -105,6 +99,13 @@ export class Player {
     const deltaPosition = this.velocity.clone().multiplyScalar(deltaTime);
     this.collider.translate(deltaPosition);
     this.handleCollisions(worldOctree);
-    this.camera.position.copy(this.collider.end);
+
+    const cameraPosition = this.collider.end.clone();
+    cameraPosition.y += GameSettings.PLAYER.COLLIDER_HEIGHT * 0.5;
+    this.playerCamera.updatePosition(cameraPosition);
+  }
+
+  public getCamera(): PlayerCamera {
+    return this.playerCamera;
   }
 } 

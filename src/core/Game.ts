@@ -24,8 +24,13 @@ export class Game {
   private keyStates: { [key: string]: boolean };
   private controls: IPlayerControls;
   private octreeHelper: OctreeHelper | null = null;
+  private frustum: THREE.Frustum;
+  private cameraViewProjectionMatrix: THREE.Matrix4;
 
   constructor(canvas: HTMLCanvasElement) {
+    this.frustum = new THREE.Frustum();
+    this.cameraViewProjectionMatrix = new THREE.Matrix4();
+
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x88ccee);
     this.scene.fog = new THREE.Fog(0x88ccee, 0, 50);
@@ -115,7 +120,10 @@ export class Game {
         this.player.setJumpPower(value);
       });
 
-    folder3.add(this.controls, "mouseSensitivity", 0, 1, 0.01);
+    folder3.add(this.controls, "mouseSensitivity", 0, 1, 0.01)
+      .onChange((value: number) => {
+        this.player.getCamera().setMouseSensitivity(value);
+      });
 
     folder1.close();
     folder2.open();
@@ -131,21 +139,39 @@ export class Game {
       this.keyStates[event.code] = false;
     });
 
-    document.addEventListener('mousedown', () => {
-      document.body.requestPointerLock();
+    document.addEventListener('click', () => {
+      if (document.pointerLockElement !== document.body) {
+        document.body.requestPointerLock();
+      }
+    });
+
+    document.addEventListener('pointerlockerror', () => {
+      console.warn('Pointer Lock Error: Could not lock pointer');
+    });
+
+    document.addEventListener('pointerlockchange', () => {
+      if (document.pointerLockElement === document.body) {
+        console.log('Pointer Lock activated');
+      } else {
+        console.log('Pointer Lock deactivated');
+      }
     });
 
     document.addEventListener('mousemove', (event) => {
       if (document.pointerLockElement === document.body) {
-        this.player.camera.rotation.y -= event.movementX / (1000 * (1 - this.controls.mouseSensitivity));
-        this.player.camera.rotation.x -= event.movementY / (1000 * (1 - this.controls.mouseSensitivity));
+        try {
+          this.player.getCamera().handleMouseMove(event.movementX, event.movementY);
+        } catch (error) {
+          console.error('Error handling mouse movement:', error);
+        }
       }
     });
 
     window.addEventListener('resize', () => {
-      this.player.camera.aspect = window.innerWidth / window.innerHeight;
-      this.player.camera.updateProjectionMatrix();
-      this.renderer.setSize(window.innerWidth, window.innerHeight);
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      this.player.getCamera().updateAspect(width, height);
+      this.renderer.setSize(width, height);
     });
   }
 
@@ -153,48 +179,115 @@ export class Game {
     // Загрузка GLB объектов
     const loader = new GLTFLoader().setPath('./models/');
     
-    MapConfig.STATIC_OBJECTS.LOAD_OBJECTS.forEach(object => {
-      loader.load(object.file, (gltf) => {
-        gltf.scene.position.copy(object.position);
-        this.worldGroup.add(gltf.scene);
-        
-        gltf.scene.traverse((child) => {
-          if (child instanceof THREE.Mesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
-            if (child.material.map) {
-              child.material.map.anisotropy = 4;
-            }
-          }
-        });
+    const loadPromises = MapConfig.STATIC_OBJECTS.LOAD_OBJECTS.map(object => {
+      return new Promise<void>((resolve, reject) => {
+        loader.load(
+          object.file, 
+          (gltf) => {
+            try {
+              gltf.scene.position.copy(object.position);
+              this.worldGroup.add(gltf.scene);
+              
+              gltf.scene.traverse((child) => {
+                if (child instanceof THREE.Mesh) {
+                  child.castShadow = true;
+                  child.receiveShadow = true;
+                  if (child.material.map) {
+                    child.material.map.anisotropy = 4;
+                  }
+                }
+              });
 
-        this.worldOctree.fromGraphNode(this.worldGroup);
-        
-        this.octreeHelper = new OctreeHelper(this.worldOctree);
-        this.octreeHelper.visible = false;
-        this.scene.add(this.octreeHelper);
+              this.worldOctree.fromGraphNode(this.worldGroup);
+              
+              if (!this.octreeHelper) {
+                this.octreeHelper = new OctreeHelper(this.worldOctree);
+                this.octreeHelper.visible = false;
+                this.scene.add(this.octreeHelper);
+              }
+              
+              resolve();
+            } catch (error) {
+              console.error('Error processing loaded model:', error);
+              reject(error);
+            }
+          },
+          undefined, // onProgress callback
+          (error) => {
+            console.error('Error loading model:', error);
+            reject(error);
+          }
+        );
       });
     });
 
     // Создание THREE.js объектов
     MapConfig.STATIC_OBJECTS.THREE_OBJESCTS.forEach(object => {
       if (object.type === 'box') {
-        const geometry = new THREE.BoxGeometry(
-          object.geometry.x,
-          object.geometry.y,
-          object.geometry.z
-        );
-        const material = new THREE.MeshPhongMaterial({ color: object.color });
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.position.copy(object.position);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        
-        this.worldGroup.add(mesh);
+        try {
+          const geometry = new THREE.BoxGeometry(
+            object.geometry.x,
+            object.geometry.y,
+            object.geometry.z
+          );
+          const material = new THREE.MeshPhongMaterial({ color: object.color });
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.position.copy(object.position);
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          
+          this.worldGroup.add(mesh);
+        } catch (error) {
+          console.error('Error creating THREE.js object:', error);
+        }
       }
     });
 
     this.scene.add(this.worldGroup);
+
+    // Ждем загрузки всех моделей
+    Promise.all(loadPromises).then(() => {
+      console.log('All models loaded successfully');
+    }).catch((error) => {
+      console.error('Error loading models:', error);
+    });
+  }
+
+  private isInView(object: THREE.Object3D): boolean {
+    const camera = this.player.getCamera().camera;
+    
+    camera.updateMatrix();
+    camera.updateMatrixWorld();
+    camera.updateProjectionMatrix();
+    
+    this.cameraViewProjectionMatrix.multiplyMatrices(
+      camera.projectionMatrix,
+      camera.matrixWorldInverse
+    );
+    
+    this.frustum.setFromProjectionMatrix(this.cameraViewProjectionMatrix);
+    
+    if (object instanceof THREE.Mesh && object.geometry) {
+      object.updateMatrix();
+      object.updateMatrixWorld();
+      
+      if (!object.geometry.boundingSphere) {
+        object.geometry.computeBoundingSphere();
+      }
+      
+      const boundingSphere = object.geometry.boundingSphere;
+      if (boundingSphere) {
+        const center = boundingSphere.center.clone().applyMatrix4(object.matrixWorld);
+        const radius = boundingSphere.radius * Math.max(
+          object.scale.x,
+          object.scale.y,
+          object.scale.z
+        );
+        return this.frustum.intersectsSphere(new THREE.Sphere(center, radius));
+      }
+    }
+    
+    return this.frustum.containsPoint(object.position);
   }
 
   private animate = (): void => {
@@ -202,12 +295,22 @@ export class Game {
 
     const delta = Math.min(this.clock.getDelta(), 0.1) / GameSettings.STEPS_PER_FRAME;
 
+    // Обновление физики
     for (let i = 0; i < GameSettings.STEPS_PER_FRAME; i++) {
       this.player.controls(delta, this.keyStates);
       this.player.update(delta, this.worldOctree);
     }
 
-    this.renderer.render(this.scene, this.player.camera);
+    // Оптимизация рендеринга
+    this.worldGroup.traverse((object) => {
+      if (object instanceof THREE.Mesh) {
+        if (object.geometry) {
+          object.visible = this.isInView(object);
+        }
+      }
+    });
+
+    this.renderer.render(this.scene, this.player.getCamera().camera);
     this.stats.update();
   }
 } 
