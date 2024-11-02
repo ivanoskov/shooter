@@ -8,6 +8,7 @@ import { Player } from "./Player";
 import { GameSettings } from "../config/settings";
 import { MapConfig } from "../config/map";
 import { IPlayerControls } from "../types";
+import { InputSystem, InputEventType, InputEvent } from "./input/InputSystem";
 
 interface StatsWithDOM extends Stats {
   domElement: HTMLDivElement;
@@ -26,6 +27,11 @@ export class Game {
   private octreeHelper: OctreeHelper | null = null;
   private frustum: THREE.Frustum;
   private cameraViewProjectionMatrix: THREE.Matrix4;
+  private inputSystem: InputSystem;
+  private frameId: number = 0;
+  private readonly CULL_DISTANCE: number = 100;
+  private meshes: THREE.Mesh[] = [];
+  private objectsToUpdate: Set<THREE.Object3D> = new Set();
 
   constructor(canvas: HTMLCanvasElement) {
     this.frustum = new THREE.Frustum();
@@ -46,13 +52,27 @@ export class Game {
       mouseSensitivity: 0.5
     };
 
+    this.inputSystem = new InputSystem();
+
+    this.renderer = new THREE.WebGLRenderer({ 
+      canvas, 
+      antialias: true,
+      powerPreference: 'high-performance',
+      stencil: false,
+      depth: true
+    });
+    
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    
+    THREE.Cache.enabled = true;
+
     this.initRenderer(canvas);
     this.initStats();
     this.initLights();
     this.initPlayer();
     this.initControls();
     this.loadMap();
-    this.setupEventListeners();
+    this.setupInputHandlers();
     this.animate();
   }
 
@@ -122,6 +142,7 @@ export class Game {
 
     folder3.add(this.controls, "mouseSensitivity", 0, 1, 0.01)
       .onChange((value: number) => {
+        this.inputSystem.setMouseSensitivity(value);
         this.player.getCamera().setMouseSensitivity(value);
       });
 
@@ -130,40 +151,22 @@ export class Game {
     folder3.close();
   }
 
-  private setupEventListeners(): void {
-    document.addEventListener('keydown', (event) => {
-      this.keyStates[event.code] = true;
-    });
-
-    document.addEventListener('keyup', (event) => {
-      this.keyStates[event.code] = false;
-    });
-
-    document.addEventListener('click', () => {
-      if (document.pointerLockElement !== document.body) {
-        document.body.requestPointerLock();
+  private setupInputHandlers(): void {
+    this.inputSystem.on(InputEventType.KEYBOARD, (event: InputEvent) => {
+      if (event.code && event.pressed !== undefined) {
+        this.keyStates[event.code] = event.pressed;
       }
     });
 
-    document.addEventListener('pointerlockerror', () => {
-      console.warn('Pointer Lock Error: Could not lock pointer');
-    });
-
-    document.addEventListener('pointerlockchange', () => {
-      if (document.pointerLockElement === document.body) {
-        console.log('Pointer Lock activated');
-      } else {
-        console.log('Pointer Lock deactivated');
+    this.inputSystem.on(InputEventType.MOUSE, (event: InputEvent) => {
+      if (event.movementX !== undefined && event.movementY !== undefined) {
+        this.player.getCamera().handleMouseMove(event.movementX, event.movementY);
       }
     });
 
-    document.addEventListener('mousemove', (event) => {
-      if (document.pointerLockElement === document.body) {
-        try {
-          this.player.getCamera().handleMouseMove(event.movementX, event.movementY);
-        } catch (error) {
-          console.error('Error handling mouse movement:', error);
-        }
+    this.inputSystem.on(InputEventType.POINTER_LOCK, (event: InputEvent) => {
+      if (event.locked !== undefined) {
+        console.log(event.locked ? 'Pointer Lock activated' : 'Pointer Lock deactivated');
       }
     });
 
@@ -176,52 +179,54 @@ export class Game {
   }
 
   private loadMap(): void {
-    // Загрузка GLB объектов
     const loader = new GLTFLoader().setPath('./models/');
     
     const loadPromises = MapConfig.STATIC_OBJECTS.LOAD_OBJECTS.map(object => {
       return new Promise<void>((resolve, reject) => {
         loader.load(
-          object.file, 
+          object.file,
           (gltf) => {
             try {
               gltf.scene.position.copy(object.position);
-              this.worldGroup.add(gltf.scene);
               
               gltf.scene.traverse((child) => {
                 if (child instanceof THREE.Mesh) {
+                  this.meshes.push(child);
+                  
+                  if (child.geometry) {
+                    child.geometry.computeBoundingSphere();
+                    child.geometry.computeBoundingBox();
+                  }
+                  
+                  if (child.material) {
+                    child.material.precision = 'mediump';
+                    if (child.material.map) {
+                      child.material.map.anisotropy = 4;
+                      child.material.map.generateMipmaps = true;
+                    }
+                  }
+                  
                   child.castShadow = true;
                   child.receiveShadow = true;
-                  if (child.material.map) {
-                    child.material.map.anisotropy = 4;
-                  }
+                  child.frustumCulled = true;
                 }
               });
 
-              this.worldOctree.fromGraphNode(this.worldGroup);
-              
-              if (!this.octreeHelper) {
-                this.octreeHelper = new OctreeHelper(this.worldOctree);
-                this.octreeHelper.visible = false;
-                this.scene.add(this.octreeHelper);
-              }
+              this.worldGroup.add(gltf.scene);
+              this.worldOctree.fromGraphNode(gltf.scene);
               
               resolve();
             } catch (error) {
-              console.error('Error processing loaded model:', error);
+              console.error('Error processing model:', error);
               reject(error);
             }
           },
-          undefined, // onProgress callback
-          (error) => {
-            console.error('Error loading model:', error);
-            reject(error);
-          }
+          undefined,
+          reject
         );
       });
     });
 
-    // Создание THREE.js объектов
     MapConfig.STATIC_OBJECTS.THREE_OBJESCTS.forEach(object => {
       if (object.type === 'box') {
         try {
@@ -245,7 +250,6 @@ export class Game {
 
     this.scene.add(this.worldGroup);
 
-    // Ждем загрузки всех моделей
     Promise.all(loadPromises).then(() => {
       console.log('All models loaded successfully');
     }).catch((error) => {
@@ -253,9 +257,45 @@ export class Game {
     });
   }
 
-  private isInView(object: THREE.Object3D): boolean {
-    const camera = this.player.getCamera().camera;
+  private isInView(object: THREE.Mesh): boolean {
+    if (!object || !object.geometry) return false;
     
+    if (!object.geometry.boundingSphere) {
+        object.geometry.computeBoundingSphere();
+    }
+    
+    if (!object.geometry.boundingSphere) return false;
+    
+    const cameraPosition = this.player.getCamera().camera.position;
+    const objectPosition = object.position;
+    
+    const distance = cameraPosition.distanceTo(objectPosition);
+    if (distance > this.CULL_DISTANCE) return false;
+    
+    const boundingSphere = object.geometry.boundingSphere.clone();
+    boundingSphere.applyMatrix4(object.matrixWorld);
+    
+    const isVisible = this.frustum.intersectsSphere(boundingSphere);
+    
+    if (!isVisible) {
+        boundingSphere.radius *= 1.1;
+        return this.frustum.intersectsSphere(boundingSphere);
+    }
+    
+    return true;
+  }
+
+  private animate = (): void => {
+    this.frameId = requestAnimationFrame(this.animate);
+
+    const delta = Math.min(this.clock.getDelta(), 0.1) / GameSettings.STEPS_PER_FRAME;
+
+    for (let i = 0; i < GameSettings.STEPS_PER_FRAME; i++) {
+      this.player.controls(delta, this.keyStates);
+      this.player.update(delta, this.worldOctree);
+    }
+
+    const camera = this.player.getCamera().camera;
     camera.updateMatrix();
     camera.updateMatrixWorld();
     camera.updateProjectionMatrix();
@@ -264,53 +304,41 @@ export class Game {
       camera.projectionMatrix,
       camera.matrixWorldInverse
     );
-    
     this.frustum.setFromProjectionMatrix(this.cameraViewProjectionMatrix);
-    
-    if (object instanceof THREE.Mesh && object.geometry) {
-      object.updateMatrix();
-      object.updateMatrixWorld();
-      
-      if (!object.geometry.boundingSphere) {
-        object.geometry.computeBoundingSphere();
-      }
-      
-      const boundingSphere = object.geometry.boundingSphere;
-      if (boundingSphere) {
-        const center = boundingSphere.center.clone().applyMatrix4(object.matrixWorld);
-        const radius = boundingSphere.radius * Math.max(
-          object.scale.x,
-          object.scale.y,
-          object.scale.z
-        );
-        return this.frustum.intersectsSphere(new THREE.Sphere(center, radius));
+
+    for (const mesh of this.meshes) {
+      if (mesh instanceof THREE.Mesh) {
+        const wasVisible = mesh.visible;
+        mesh.visible = this.isInView(mesh);
+        
+        if (mesh.visible) {
+          this.objectsToUpdate.add(mesh);
+          if (!wasVisible) {
+            mesh.updateMatrix();
+            mesh.updateMatrixWorld();
+          }
+        } else {
+          this.objectsToUpdate.delete(mesh);
+        }
       }
     }
-    
-    return this.frustum.containsPoint(object.position);
+
+    this.renderer.render(this.scene, camera);
+    this.stats.update();
   }
 
-  private animate = (): void => {
-    requestAnimationFrame(this.animate);
-
-    const delta = Math.min(this.clock.getDelta(), 0.1) / GameSettings.STEPS_PER_FRAME;
-
-    // Обновление физики
-    for (let i = 0; i < GameSettings.STEPS_PER_FRAME; i++) {
-      this.player.controls(delta, this.keyStates);
-      this.player.update(delta, this.worldOctree);
-    }
-
-    // Оптимизация рендеринга
-    this.worldGroup.traverse((object) => {
+  public dispose(): void {
+    cancelAnimationFrame(this.frameId);
+    this.renderer.dispose();
+    this.scene.traverse((object) => {
       if (object instanceof THREE.Mesh) {
-        if (object.geometry) {
-          object.visible = this.isInView(object);
+        object.geometry.dispose();
+        if (Array.isArray(object.material)) {
+          object.material.forEach(material => material.dispose());
+        } else {
+          object.material.dispose();
         }
       }
     });
-
-    this.renderer.render(this.scene, this.player.getCamera().camera);
-    this.stats.update();
   }
 } 

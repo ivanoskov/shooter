@@ -4,6 +4,7 @@ import { GameSettings } from "../config/settings";
 export class PlayerCamera {
   public camera: THREE.PerspectiveCamera;
   private mouseSensitivity: number;
+  private readonly tempVector: THREE.Vector3;
 
   constructor(scene: THREE.Scene) {
     this.camera = new THREE.PerspectiveCamera(
@@ -22,6 +23,11 @@ export class PlayerCamera {
     this.camera.updateMatrix();
     this.camera.updateMatrixWorld();
     
+    this.tempVector = new THREE.Vector3();
+    
+    // Оптимизируем камеру
+    this.camera.matrixAutoUpdate = false;
+    
     scene.add(this.camera);
   }
 
@@ -30,11 +36,15 @@ export class PlayerCamera {
   }
 
   public handleMouseMove(movementX: number, movementY: number): void {
-    this.camera.rotation.y -= movementX / (1000 * (1 - this.mouseSensitivity));
+    // Оптимизируем вычисления
+    const sensitivity = 1000 * (1 - this.mouseSensitivity);
+    this.camera.rotation.y -= movementX / sensitivity;
     this.camera.rotation.x = Math.max(
       -Math.PI / 2,
-      Math.min(Math.PI / 2, this.camera.rotation.x - movementY / (1000 * (1 - this.mouseSensitivity)))
+      Math.min(Math.PI / 2, this.camera.rotation.x - movementY / sensitivity)
     );
+    
+    this.camera.updateMatrix();
   }
 
   public updateAspect(width: number, height: number): void {
@@ -45,6 +55,5 @@ export class PlayerCamera {
   public updatePosition(position: THREE.Vector3): void {
     this.camera.position.copy(position);
     this.camera.updateMatrix();
-    this.camera.updateMatrixWorld();
   }
 } 

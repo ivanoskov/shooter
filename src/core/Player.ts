@@ -13,6 +13,8 @@ export class Player {
   private jumpPower: number;
   public collider: Capsule;
   private playerCamera: PlayerCamera;
+  private readonly tempVector: THREE.Vector3;
+  private readonly tempDirection: THREE.Vector3;
 
   constructor(scene: THREE.Scene) {
     this.position = GameSettings.PLAYER.INITIAL_POSITION.clone();
@@ -29,6 +31,9 @@ export class Player {
     );
 
     this.playerCamera = new PlayerCamera(scene);
+
+    this.tempVector = new THREE.Vector3();
+    this.tempDirection = new THREE.Vector3();
   }
 
   public setSpeed(speed: number): void {
@@ -40,18 +45,18 @@ export class Player {
   }
 
   private getForwardVector(): THREE.Vector3 {
-    this.playerCamera.camera.getWorldDirection(this.direction);
-    this.direction.y = 0;
-    this.direction.normalize();
-    return this.direction;
+    this.playerCamera.camera.getWorldDirection(this.tempDirection);
+    this.tempDirection.y = 0;
+    this.tempDirection.normalize();
+    return this.tempDirection;
   }
 
   private getSideVector(): THREE.Vector3 {
-    this.playerCamera.camera.getWorldDirection(this.direction);
-    this.direction.y = 0;
-    this.direction.normalize();
-    this.direction.cross(this.playerCamera.camera.up);
-    return this.direction;
+    this.playerCamera.camera.getWorldDirection(this.tempDirection);
+    this.tempDirection.y = 0;
+    this.tempDirection.normalize();
+    this.tempDirection.cross(this.playerCamera.camera.up);
+    return this.tempDirection;
   }
 
   public controls(deltaTime: number, keyStates: { [key: string]: boolean }): void {
@@ -88,21 +93,23 @@ export class Player {
   }
 
   public update(deltaTime: number, worldOctree: Octree): void {
-    let damping = Math.exp(-4 * deltaTime) - 1;
-
+    const damping = Math.exp(-4 * deltaTime) - 1;
+    
     if (!this.onFloor) {
       this.velocity.y -= GameSettings.GRAVITY * deltaTime;
-      damping *= 0.1;
     }
-
-    this.velocity.addScaledVector(this.velocity, damping);
-    const deltaPosition = this.velocity.clone().multiplyScalar(deltaTime);
-    this.collider.translate(deltaPosition);
+    
+    this.tempVector.copy(this.velocity).multiplyScalar(damping * (this.onFloor ? 1 : 0.1));
+    this.velocity.add(this.tempVector);
+    
+    this.tempVector.copy(this.velocity).multiplyScalar(deltaTime);
+    this.collider.translate(this.tempVector);
+    
     this.handleCollisions(worldOctree);
-
-    const cameraPosition = this.collider.end.clone();
-    cameraPosition.y += GameSettings.PLAYER.COLLIDER_HEIGHT * 0.5;
-    this.playerCamera.updatePosition(cameraPosition);
+    
+    this.tempVector.copy(this.collider.end);
+    this.tempVector.y += GameSettings.PLAYER.COLLIDER_HEIGHT * 0.5;
+    this.playerCamera.updatePosition(this.tempVector);
   }
 
   public getCamera(): PlayerCamera {

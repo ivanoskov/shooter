@@ -40,4 +40,19 @@ export interface IPlayerControls {
   speed: number;
   jumpPower: number;
   mouseSensitivity: number;
+}
+
+export interface IInputEvent {
+  type: string;
+  code?: string;
+  pressed?: boolean;
+  movementX?: number;
+  movementY?: number;
+  locked?: boolean;
+}
+
+export interface IEventEmitter {
+  on(event: string, callback: Function): void;
+  off(event: string, callback: Function): void;
+  emit(event: string, ...args: any[]): void;
 } 
