@@ -4,7 +4,6 @@ import { GameSettings } from "../config/settings";
 export class PlayerCamera {
   public camera: THREE.PerspectiveCamera;
   private mouseSensitivity: number;
-  private readonly tempVector: THREE.Vector3;
 
   constructor(scene: THREE.Scene) {
     this.camera = new THREE.PerspectiveCamera(
@@ -22,8 +21,6 @@ export class PlayerCamera {
     
     this.camera.updateMatrix();
     this.camera.updateMatrixWorld();
-    
-    this.tempVector = new THREE.Vector3();
     
     // Оптимизируем камеру
     this.camera.matrixAutoUpdate = false;

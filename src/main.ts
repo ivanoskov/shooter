@@ -1,10 +1,20 @@
 import { Game } from './core/Game';
 import './style.css';
 
-const canvas = document.querySelector<HTMLCanvasElement>('.canvas');
+// Динамический импорт для ленивой загрузки
+async function initGame() {
+  const canvas = document.querySelector<HTMLCanvasElement>('.canvas');
 
-if (!canvas) {
-  throw new Error('Canvas element not found');
+  if (!canvas) {
+    throw new Error('Canvas element not found');
+  }
+
+  // Инициализируем игру только после загрузки всех необходимых ресурсов
+  const game = new Game(canvas);
+  return game;
 }
 
-new Game(canvas); 
+// Запускаем инициализацию только после полной загрузки страницы
+window.addEventListener('load', () => {
+  initGame().catch(console.error);
+}); 

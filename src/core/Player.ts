@@ -7,7 +7,6 @@ import { PlayerCamera } from "./Camera";
 export class Player {
   private position: THREE.Vector3;
   private velocity: THREE.Vector3;
-  private direction: THREE.Vector3;
   private onFloor: boolean;
   private speed: number;
   private jumpPower: number;
@@ -19,7 +18,6 @@ export class Player {
   constructor(scene: THREE.Scene) {
     this.position = GameSettings.PLAYER.INITIAL_POSITION.clone();
     this.velocity = new THREE.Vector3();
-    this.direction = new THREE.Vector3();
     this.onFloor = false;
     this.speed = GameSettings.PLAYER.INITIAL_SPEED;
     this.jumpPower = GameSettings.PLAYER.INITIAL_JUMP_POWER;

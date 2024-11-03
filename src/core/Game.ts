@@ -79,6 +79,14 @@ export class Game {
     this.loadMap();
     this.setupInputHandlers();
     this.animate();
+
+    // Добавляем обработчик изменения полноэкранного режима
+    document.addEventListener('fullscreenchange', () => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      this.player.getCamera().updateAspect(width, height);
+      this.renderer.setSize(width, height);
+    });
   }
 
   private initRenderer(canvas: HTMLCanvasElement): void {
@@ -166,7 +174,7 @@ export class Game {
 
     const graphicsFolder = gui.addFolder("Graphics");
     
-    const qualityControl = graphicsFolder.add({ quality: 'high' }, 'quality', ['low', 'medium', 'high'])
+    graphicsFolder.add({ quality: 'high' }, 'quality', ['low', 'medium', 'high'])
       .onChange((value: string) => {
         this.applyQualityPreset(value);
       });
