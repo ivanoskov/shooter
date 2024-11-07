@@ -24,7 +24,9 @@ export class Player {
 
     this.collider = new Capsule(
       this.position.clone(),
-      new THREE.Vector3().copy(this.position).add(new THREE.Vector3(0, GameSettings.PLAYER.COLLIDER_HEIGHT, 0)),
+      new THREE.Vector3()
+        .copy(this.position)
+        .add(new THREE.Vector3(0, GameSettings.PLAYER.COLLIDER_HEIGHT, 0)),
       GameSettings.PLAYER.COLLIDER_RADIUS
     );
 
@@ -57,8 +59,12 @@ export class Player {
     return this.tempDirection;
   }
 
-  public controls(deltaTime: number, keyStates: { [key: string]: boolean }): void {
-    const speedDelta = deltaTime * (this.onFloor ? this.speed : this.speed * 0.32);
+  public controls(
+    deltaTime: number,
+    keyStates: { [key: string]: boolean }
+  ): void {
+    const speedDelta =
+      deltaTime * (this.onFloor ? this.speed : this.speed * 0.32);
 
     if (keyStates["KeyW"]) {
       this.velocity.add(this.getForwardVector().multiplyScalar(speedDelta));
@@ -84,7 +90,24 @@ export class Player {
     if (result) {
       this.onFloor = result.normal.y > 0;
       if (!this.onFloor) {
-        this.velocity.addScaledVector(result.normal, -result.normal.dot(this.velocity));
+        this.velocity.addScaledVector(
+          result.normal,
+          -result.normal.dot(this.velocity)
+        );
+      }
+      this.collider.translate(result.normal.multiplyScalar(result.depth));
+    }
+  }
+
+  public handleDynamicCollisions(dynamicOctree: Octree): void {
+    const result = dynamicOctree.capsuleIntersect(this.collider);
+
+    if (result) {
+      if (!this.onFloor) {
+        this.velocity.addScaledVector(
+          result.normal,
+          -result.normal.dot(this.velocity)
+        );
       }
       this.collider.translate(result.normal.multiplyScalar(result.depth));
     }
@@ -92,19 +115,21 @@ export class Player {
 
   public update(deltaTime: number, worldOctree: Octree): void {
     const damping = Math.exp(-4 * deltaTime) - 1;
-    
+
     if (!this.onFloor) {
       this.velocity.y -= GameSettings.GRAVITY * deltaTime;
     }
-    
-    this.tempVector.copy(this.velocity).multiplyScalar(damping * (this.onFloor ? 1 : 0.1));
+
+    this.tempVector
+      .copy(this.velocity)
+      .multiplyScalar(damping * (this.onFloor ? 1 : 0.1));
     this.velocity.add(this.tempVector);
-    
+
     this.tempVector.copy(this.velocity).multiplyScalar(deltaTime);
     this.collider.translate(this.tempVector);
-    
+
     this.handleCollisions(worldOctree);
-    
+
     this.tempVector.copy(this.collider.end);
     this.tempVector.y += GameSettings.PLAYER.COLLIDER_HEIGHT * 0.5;
     this.playerCamera.updatePosition(this.tempVector);
@@ -113,4 +138,4 @@ export class Player {
   public getCamera(): PlayerCamera {
     return this.playerCamera;
   }
-} 
+}

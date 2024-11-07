@@ -1,5 +1,11 @@
-import { Vector3, ACESFilmicToneMapping, ColorManagement, ToneMapping } from "three";
-import { IGameSettings, IGraphicsSettings } from "../types/graphics";
+import {
+  Vector3,
+  ACESFilmicToneMapping,
+  ColorManagement,
+  ToneMapping,
+} from "three";
+import { IGameSettings } from "../types/game";
+import { IGraphicsSettings } from "../types/graphics";
 
 ColorManagement.enabled = true;
 
@@ -11,7 +17,7 @@ const graphicsSettings: IGraphicsSettings = {
   TONE_MAPPING: ACESFilmicToneMapping as ToneMapping,
   EXPOSURE: 1.0,
   GAMMA_FACTOR: 2.2,
-  MAX_LIGHTS: 4
+  MAX_LIGHTS: 4,
 };
 
 export const GameSettings: IGameSettings = {
@@ -22,12 +28,20 @@ export const GameSettings: IGameSettings = {
     COLLIDER_RADIUS: 0.35,
     COLLIDER_HEIGHT: 0.65,
     INITIAL_SPEED: 25,
-    INITIAL_JUMP_POWER: 15
+    INITIAL_JUMP_POWER: 15,
   },
   CAMERA: {
     FOV: 75,
     NEAR: 0.1,
-    FAR: 1000
+    FAR: 1000,
   },
-  GRAPHICS: graphicsSettings
-}; 
+  GRAPHICS: graphicsSettings,
+  PHYSICS: {
+    octreeMaxDepth: 8,
+    octreeMinSize: 0.5,
+    octreeLoosenessFactor: 1.2,
+    collisionIterations: 3,
+    enableDynamicObjects: true,
+    debugPhysics: false,
+  },
+};

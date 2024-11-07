@@ -4,4 +4,4 @@ declare module "three/examples/jsm/libs/stats.module.js" {
     update(): void;
   }
   export default Stats;
-} 
+}

@@ -6,7 +6,7 @@ export interface IStaticObject {
 }
 
 export interface IThreeObject {
-  type: 'box' | 'sphere' | 'cylinder';
+  type: "box" | "sphere" | "cylinder";
   position: Vector3;
   geometry: Vector3;
   color: string;
@@ -55,4 +55,10 @@ export interface IEventEmitter {
   on(event: string, callback: Function): void;
   off(event: string, callback: Function): void;
   emit(event: string, ...args: any[]): void;
-} 
+}
+
+export * from "./game";
+export * from "./graphics";
+export * from "./physics";
+export * from "./input";
+export * from "./map";

@@ -12,19 +12,19 @@ export class PlayerCamera {
       GameSettings.CAMERA.NEAR,
       GameSettings.CAMERA.FAR
     );
-    
+
     this.camera.position.copy(GameSettings.PLAYER.INITIAL_POSITION);
     this.camera.position.y += GameSettings.PLAYER.COLLIDER_HEIGHT;
-    
+
     this.camera.rotation.order = "YXZ";
     this.mouseSensitivity = 0.5;
-    
+
     this.camera.updateMatrix();
     this.camera.updateMatrixWorld();
-    
+
     // Оптимизируем камеру
     this.camera.matrixAutoUpdate = false;
-    
+
     scene.add(this.camera);
   }
 
@@ -40,7 +40,7 @@ export class PlayerCamera {
       -Math.PI / 2,
       Math.min(Math.PI / 2, this.camera.rotation.x - movementY / sensitivity)
     );
-    
+
     this.camera.updateMatrix();
   }
 
@@ -53,4 +53,4 @@ export class PlayerCamera {
     this.camera.position.copy(position);
     this.camera.updateMatrix();
   }
-} 
+}

@@ -12,7 +12,7 @@ export const MapConfig: IMapConfig = {
         position: new Vector3(2, -1.4, 0),
         geometry: new Vector3(0.6, 0.3, 4),
         color: "red",
-      }
+      },
     ],
   },
-}; 
+};
